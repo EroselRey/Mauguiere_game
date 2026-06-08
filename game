@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mauguière Goal Master - Grand Concours</title>
+    <!-- Importation d'une police moderne -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #006cb8;
+            --primary-hover: #005a9e;
+            --secondary: #808285;
+            --bg-dark: #0f172a;
+            --text-light: #f8fafc;
+            --accent: #fbbf24;
+            --danger: #ef4444;
+            --success: #10b981;
+            --glass-bg: rgba(15, 23, 42, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-dark);
+        }
+
+        body {
+            background: radial-gradient(circle at center top, #1e293b, var(--bg-dark));
+            background-attachment: fixed;
+            color: var(--text-light);
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        /* --- En-tête --- */
+        .header {
+            text-align: center;
+            padding: 10px 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .brand-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .brand-logo-img { max-width: 180px; height: auto; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.4)); margin-top: 5px; }
+
+        .contest-banner {
+            margin-top: 8px;
+            background: linear-gradient(135deg, var(--accent), #d97706);
+            color: #000;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 800;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* --- Conteneur du Jeu --- */
+        .game-container {
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 108, 184, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--glass-border);
+            width: 100%;
+            max-width: 800px;
+            margin: 0 10px; /* Ajoute un peu de marge de sécurité */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            background-color: #0f172a;
+            cursor: crosshair;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain; /* S'assure que le canvas reste proportionnel */
+        }
+
+        /* --- Interface en jeu --- */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 24px;
+            font-weight: 900;
+            text-shadow: 0 4px 10px rgba(0, 0, 0, 0.8);
+        }
+
+        #score-display { color: #4ade80; }
+        #time-display { color: #f87171; }
+
+        /* --- Écrans de menu (Overlay) --- */
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--glass-bg);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            text-align: center;
+            padding: 15px;
+            box-sizing: border-box;
+            z-index: 20;
+            transition: opacity 0.3s ease;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 20px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-height: 95%;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        .panel::-webkit-scrollbar { width: 4px; }
+        .panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+
+        h2 { font-size: 22px; margin: 5px 0 10px 0; color: var(--text-light); font-weight: 900; }
+        p.subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 15px; line-height: 1.4; }
+
+        /* --- Formulaires --- */
+        .form-group { width: 100%; margin-bottom: 15px; text-align: left; }
+        .form-group label { display: block; font-size: 12px; color: #cbd5e1; margin-bottom: 5px; font-weight: 600; }
+        
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            font-size: 16px; /* Empêche le zoom auto sur iOS */
+            font-family: 'Outfit', sans-serif;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            outline: none;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+        }
+        
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 8px rgba(0, 108, 184, 0.4);
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s ease;
+            background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+            box-shadow: 0 4px 15px rgba(0, 108, 184, 0.4);
+            margin-bottom: 10px;
+            -webkit-appearance: none;
+        }
+
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            color: #cbd5e1;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.05);
+            margin-bottom: 10px;
+        }
+
+        /* --- Leaderboard --- */
+        .leaderboard-container {
+            width: 100%;
+            margin-top: 15px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 8px;
+            padding: 15px;
+            box-sizing: border-box;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .leaderboard-container h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+
+        .lb-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 14px;
+        }
+        .lb-item:last-child { border-bottom: none; }
+        .lb-rank { font-weight: 900; width: 25px; color: #94a3b8; }
+        .lb-rank.top1 { color: #fbbf24; font-size: 16px; }
+        .lb-rank.top2 { color: #94a3b8; font-size: 16px; }
+        .lb-rank.top3 { color: #b45309; font-size: 16px; }
+        .lb-name { flex-grow: 1; text-align: left; padding-left: 5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .lb-score { font-weight: 900; color: var(--success); }
+        .lb-item.current-player { background: rgba(16, 185, 129, 0.1); border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.3); }
+
+        .loading { font-size: 13px; color: #94a3b8; font-style: italic; text-align: center; }
+
+        /* --- Section Parrainage --- */
+        .referral-box {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px dashed var(--accent);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .referral-box h4 {
+            color: var(--accent);
+            margin: 0 0 5px 0;
+            font-size: 15px;
+            text-transform: uppercase;
+        }
+
+        .referral-box p {
+            font-size: 12px;
+            color: #cbd5e1;
+            margin: 0 0 10px 0;
+            line-height: 1.4;
+        }
+
+        .referral-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: white;
+        }
+
+        .ref-link-input {
+            width: 100%;
+            padding: 10px;
+            font-size: 12px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #94a3b8;
+            margin-bottom: 10px;
+            text-align: center;
+            border-radius: 6px;
+            user-select: all;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="brand-container">
+            <img src="https://multiairfrance.store/calculateurs/logos/logo%20mauguiere%20blanc.webp" alt="Mauguière" class="brand-logo-img">
+        </div>
+        <div class="contest-banner">🎁 Gagnez un Compresseur 25L !</div>
+    </div>
+
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+        
+        <div class="ui-layer">
+            <div class="stats">
+                <div id="score-display">0</div>
+                <div id="time-display">30s</div>
+            </div>
+            <!-- Instructions discrètes pendant le jeu -->
+            <div id="game-hint" style="text-align: center; color: rgba(255,255,255,0.5); font-size: 14px; font-weight: bold; margin-top: auto;">Appuyez sur Espace ou cliquez pour tirer</div>
+        </div>
+
+        <div id="overlay">
+            
+            <!-- ÉCRAN 1 : ACCUEIL -->
+            <div id="screen-start" class="panel">
+                <img src="https://multiairfrance.store/calculateurs/images/piston%201.jpg" alt="Compresseur à gagner" style="width: 140px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);">
+                <h2>GOAL MASTER</h2>
+                <p class="subtitle">Enchaînez les buts en 30 secondes.<br>Visez le compresseur Mauguière bleu (+500pts) et évitez le concurrent rouge (-300pts) !</p>
+                <button id="btn-start" class="btn-primary">LANCER LA PARTIE</button>
+                <div style="font-size: 11px; color: #64748b; margin-top: 10px;">Meilleur score = 1 compresseur offert.</div>
+                <!-- Message si l'utilisateur a été invité -->
+                <div id="invited-msg" style="display: none; color: var(--accent); font-size: 12px; font-weight: bold; margin-top: 10px; background: rgba(245, 158, 11, 0.1); padding: 8px; border-radius: 6px;">Vous avez été invité par <span id="inviter-name"></span> !</div>
+            </div>
+
+            <!-- ÉCRAN 2 : FIN DE PARTIE & SAISIE INFOS -->
+            <div id="screen-save" class="panel" style="display: none;">
+                <h2>TEMPS ÉCOULÉ</h2>
+                <div style="font-size: 40px; font-weight: 900; color: #4ade80; margin: 10px 0; text-shadow: 0 0 15px rgba(74, 222, 128, 0.4);" id="final-score">0</div>
+                <p class="subtitle">Enregistrez votre score pour entrer dans le classement et tenter de gagner le gros lot !</p>
+                
+                <div class="form-group">
+                    <label>Pseudo (Affiché publiquement)</label>
+                    <input type="text" id="input-pseudo" placeholder="Votre Pseudo" maxlength="15">
+                </div>
+                <div class="form-group">
+                    <label>Email (Obligatoire pour vous contacter)</label>
+                    <input type="email" id="input-email" placeholder="votre@email.com">
+                </div>
+                <div class="form-group">
+                    <label>Téléphone (Facultatif)</label>
+                    <input type="tel" id="input-phone" placeholder="06 00 00 00 00">
+                </div>
+                
+                <p id="save-error" style="color: var(--danger); font-size: 12px; margin-bottom: 10px; display: none;">Veuillez remplir Pseudo et Email.</p>
+                <button id="btn-save" class="btn-primary" style="background: linear-gradient(135deg, #10b981, #059669);">VALIDER MON SCORE</button>
+                <button id="btn-skip" class="btn-secondary">Rejouer sans enregistrer</button>
+            </div>
+
+            <!-- ÉCRAN 3 : LEADERBOARD -->
+            <div id="screen-leaderboard" class="panel" style="display: none; max-width: 500px;">
+                <h2 style="color: var(--success);">Score Enregistré !</h2>
+                <p class="subtitle" style="margin-bottom: 5px;">Si vous terminez 1er à la fin de l'événement, nous vous contacterons.</p>
+                
+                <div class="leaderboard-container">
+                    <h3>🏆 Classement Général</h3>
+                    <div id="leaderboard-list">
+                        <div class="loading">Chargement du classement...</div>
+                    </div>
+                </div>
+
+                <!-- Section Parrainage (Remplace le simple bouton de partage) -->
+                <div class="referral-box">
+                    <h4>🚀 Gagnez jusqu'à +5000 pts !</h4>
+                    <p>Partagez ce lien à vos amis. Si un ami s'inscrit et enregistre son score via votre lien, vous recevrez automatiquement <strong>+500 points</strong> (Limité à 10 amis valides).</p>
+                    
+                    <div class="referral-stats">
+                        <span>Amis inscrits : <span id="ref-count" style="color: var(--success);">0</span>/10</span>
+                        <span>Bonus accumulé : <span id="ref-bonus" style="color: var(--accent);">0</span> pts</span>
+                    </div>
+
+                    <input type="text" id="ref-link" class="ref-link-input" readonly value="Génération du lien...">
+                    <button id="btn-share" class="btn-primary" style="background: linear-gradient(135deg, #f59e0b, #d97706); margin-bottom: 0; font-size: 14px;">COPIER MON LIEN D'INVITATION</button>
+                </div>
+
+                <div style="width: 100%; margin-top: 15px;">
+                    <button id="btn-replay" class="btn-secondary" style="margin-bottom: 0;">RETENTER MA CHANCE</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+<!-- Module Firebase (Séparé) -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, getDoc, query, where, getDocs, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    let db, auth, currentUser;
+    let isFirebaseActive = false;
+    let leaderboardData = [];
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'mauguiere-goalmaster-contest';
+
+    if (typeof __firebase_config !== 'undefined') {
+        try {
+            const firebaseConfig = JSON.parse(__firebase_config);
+            const app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            isFirebaseActive = true;
+
+            const initAuth = async () => {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            };
+            initAuth();
+
+            onAuthStateChanged(auth, (user) => {
+                currentUser = user;
+                if (user) {
+                    loadLeaderboard();
+                    checkReferralURL(); // Vérifie si l'utilisateur arrive via un lien de parrainage
+                }
+            });
+        } catch (e) {
+            console.warn("Mode local : Firebase non configuré.", e);
+        }
+    } else {
+        document.getElementById('leaderboard-list').innerHTML = "<div class='loading'>Mode local actif (Classement non disponible)</div>";
+    }
+
+    // --- LOGIQUE DE PARRAINAGE ---
+
+    // 1. Vérifier si l'URL contient un ID de parrain
+    let referrerDocId = null;
+
+    function checkReferralURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const refId = urlParams.get('ref');
+        
+        if (refId && isFirebaseActive) {
+            referrerDocId = refId;
+            // On pourrait faire une requête ici pour récupérer le nom du parrain, 
+            // mais pour la vitesse, on affiche juste "un ami" par défaut, ou on laisse silencieux
+            document.getElementById('invited-msg').style.display = 'block';
+            document.getElementById('inviter-name').innerText = "un ami"; 
+        }
+    }
+
+    // 2. Valider le parrainage (Appelé quand LE NOUVEAU JOUEUR enregistre son score)
+    async function processReferral(newPlayerEmail) {
+        if (!isFirebaseActive || !referrerDocId) return;
+
+        try {
+            const referrerRef = doc(db, 'artifacts', appId, 'public', 'data', 'contest_scores', referrerDocId);
+            const referrerSnap = await getDoc(referrerRef);
+
+            if (referrerSnap.exists()) {
+                const referrerData = referrerSnap.data();
+                
+                // Vérifier que le parrain ne s'invite pas lui-même ! (Basé sur l'email)
+                if (referrerData.email === newPlayerEmail) return;
+
+                const currentRefs = referrerData.referralsCount || 0;
+                
+                // Limite de 10 invitations rémunérées
+                if (currentRefs < 10) {
+                    // Mettre à jour le parrain : +1 ami, +500 points
+                    await updateDoc(referrerRef, {
+                        referralsCount: increment(1),
+                        score: increment(500)
+                    });
+                    console.log("Parrain crédité !");
+                }
+            }
+        } catch (error) {
+            console.error("Erreur lors du traitement du parrainage :", error);
+        }
+    }
+
+    // ----------------------------
+
+    function loadLeaderboard() {
+        if (!isFirebaseActive || !currentUser) return;
+        const scoresRef = collection(db, 'artifacts', appId, 'public', 'data', 'contest_scores');
+        
+        onSnapshot(scoresRef, (snapshot) => {
+            leaderboardData = [];
+            snapshot.forEach(doc => leaderboardData.push({ id: doc.id, ...doc.data() }));
+            
+            // Tri décroissant
+            leaderboardData.sort((a, b) => b.score - a.score);
+            renderLeaderboard();
+
+            // Mettre à jour les stats de parrainage de l'utilisateur courant S'IL EST sur l'écran leaderboard
+            if (window.currentDocId) {
+                const myData = leaderboardData.find(d => d.id === window.currentDocId);
+                if (myData) {
+                    const refs = myData.referralsCount || 0;
+                    document.getElementById('ref-count').innerText = refs;
+                    document.getElementById('ref-bonus').innerText = refs * 500;
+                    // On met à jour le score local pour l'affichage (s'il a gagné des points en fond de tâche)
+                    window.lastSavedScore = myData.score; 
+                }
+            }
+
+        }, (error) => console.error(error));
+    }
+
+    function renderLeaderboard() {
+        const list = document.getElementById('leaderboard-list');
+        let html = '';
+        
+        // On affiche le Top 10
+        const top10 = leaderboardData.slice(0, 10);
+        
+        if (top10.length === 0) {
+            html = "<div class='loading'>Soyez le premier à enregistrer un score !</div>";
+        } else {
+            top10.forEach((entry, index) => {
+                let rankClass = "";
+                let medal = `${index+1}.`;
+                if (index === 0) { rankClass = "top1"; medal = "🥇"; }
+                else if (index === 1) { rankClass = "top2"; medal = "🥈"; }
+                else if (index === 2) { rankClass = "top3"; medal = "🥉"; }
+
+                const isMe = window.currentDocId === entry.id;
+
+                html += `
+                    <div class="lb-item ${isMe ? 'current-player' : ''}">
+                        <div class="lb-rank ${rankClass}">${medal}</div>
+                        <div class="lb-name">${entry.pseudo}</div>
+                        <div class="lb-score">${entry.score}</div>
+                    </div>
+                `;
+            });
+        }
+        list.innerHTML = html;
+    }
+
+    // Exposer la fonction de sauvegarde
+    window.saveScoreToFirebase = async function(pseudo, email, phone, score) {
+        if (!isFirebaseActive || !currentUser) return null;
+        try {
+            const scoresRef = collection(db, 'artifacts', appId, 'public', 'data', 'contest_scores');
+            const docRef = await addDoc(scoresRef, {
+                pseudo: pseudo,
+                email: email,
+                phone: phone,
+                score: score,
+                referralsCount: 0, // Compteur d'invitations validées
+                timestamp: Date.now()
+            });
+
+            // Si cet utilisateur a été parrainé, on valide le parrainage maintenant !
+            if (referrerDocId) {
+                await processReferral(email);
+                referrerDocId = null; // Réinitialiser pour éviter les doubles validations
+            }
+
+            return docRef.id;
+        } catch (e) {
+            console.error("Erreur de sauvegarde :", e);
+            return null;
+        }
+    };
+</script>
+
+<!-- Logique du Jeu (Canvas & Contrôles) -->
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI
+    const screenStart = document.getElementById('screen-start');
+    const screenSave = document.getElementById('screen-save');
+    const screenLeaderboard = document.getElementById('screen-leaderboard');
+    const overlay = document.getElementById('overlay');
+    const scoreDisplay = document.getElementById('score-display');
+    const timeDisplay = document.getElementById('time-display');
+    const gameHint = document.getElementById('game-hint');
+
+    // Adapter le canvas
+    function resizeCanvas() {
+        // On utilise la taille de la fenêtre (window) plutôt que celle du parent pour éviter l'écrasement
+        const maxWidth = Math.min(800, window.innerWidth - 20);
+        const maxHeight = Math.min(500, window.innerHeight - 150);
+        
+        // Applique la taille CSS, le canvas garde sa résolution interne (800x500)
+        canvas.style.width = maxWidth + 'px';
+        canvas.style.height = Math.min(maxWidth * 0.625, maxHeight) + 'px';
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); // Forcer l'appel immédiatement
+    
+    // Attendre que le DOM soit prêt
+    document.addEventListener("DOMContentLoaded", function() {
+        resizeCanvas();
+        
+        window.currentDocId = null; // Stocke l'ID du document du joueur courant
+        let hasShared = false;
+
+        // --- Événements Boutons ---
+        document.getElementById('btn-start').addEventListener('click', startGame);
+        
+        document.getElementById('btn-skip').addEventListener('click', startGame);
+        
+        document.getElementById('btn-replay').addEventListener('click', startGame);
+
+        document.getElementById('btn-save').addEventListener('click', async function() {
+            const pseudo = document.getElementById('input-pseudo').value.trim();
+            const email = document.getElementById('input-email').value.trim();
+            const phone = document.getElementById('input-phone').value.trim();
+            const errorEl = document.getElementById('save-error');
+            const btnSave = document.getElementById('btn-save');
+
+            // Vérification basique de l'email
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+            if (!pseudo || !emailPattern.test(email)) {
+                errorEl.innerText = "Veuillez fournir un Pseudo et un Email valide.";
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            errorEl.style.display = 'none';
+            btnSave.innerText = "ENREGISTREMENT...";
+            btnSave.disabled = true;
+
+            // Appel Firebase
+            if (window.saveScoreToFirebase) {
+                window.currentDocId = await window.saveScoreToFirebase(pseudo, email, phone, score);
+            }
+
+            // Générer le lien de parrainage avec l'ID du document du joueur
+            if (window.currentDocId) {
+                // Créer une URL propre basée sur l'URL actuelle, en enlevant les paramètres existants
+                const baseUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                const refLink = `${baseUrl}?ref=${window.currentDocId}`;
+                document.getElementById('ref-link').value = refLink;
+            } else {
+                document.getElementById('ref-link').value = "Erreur de génération du lien (Mode local).";
+            }
+
+            // Changer d'écran
+            screenSave.style.display = 'none';
+            screenLeaderboard.style.display = 'flex';
+            btnSave.innerText = "VALIDER MON SCORE";
+            btnSave.disabled = false;
+        });
+
+        // Logique de partage (Copie du lien de parrainage)
+        document.getElementById('btn-share').addEventListener('click', async function() {
+            const refLink = document.getElementById('ref-link').value;
+            const textToShare = `⚽ J'ai fait ${window.lastSavedScore || score} points sur Mauguière Goal Master !\nInscris-toi via mon lien pour tenter de gagner un compresseur 25L : ${refLink}`;
+            
+            const btnShare = document.getElementById('btn-share');
+            const originalText = btnShare.innerText;
+
+            try {
+                // Utilisation de l'API de partage native si sur mobile
+                if (navigator.share) {
+                    await navigator.share({
+                        title: 'Mauguière Goal Master',
+                        text: textToShare
+                    });
+                } else {
+                    // Fallback sur PC : on copie le lien
+                    await navigator.clipboard.writeText(textToShare);
+                }
+                
+                btnShare.innerText = "LIEN COPIÉ ! ✅";
+                btnShare.style.background = "linear-gradient(135deg, #10b981, #059669)";
+                
+                setTimeout(() => {
+                    btnShare.innerText = originalText;
+                    btnShare.style.background = "linear-gradient(135deg, #f59e0b, #d97706)";
+                }, 3000);
+
+            } catch (err) {
+                console.error('Erreur de partage/copie:', err);
+            }
+        });
+    });
+
+    // --- État du jeu ---
+    let score = 0;
+    let timeLeft = 30;
+    let gameActive = false;
+    let timerInterval;
+    let messages = [];
+    let ballTrails = [];
+
+    // --- Images ---
+    const bgLogo = new Image();
+    bgLogo.src = "https://multiairfrance.store/calculateurs/logos/logo%20mauguiere%20blanc.webp";
+
+    // --- Entités Physiques ---
+    const goalHeight = 250;
+    const ball = { x: 400, y: 460, radius: 14, isShooting: false, speedY: 0, speedX: 7, direction: 1, rotation: 0 };
+    const compressor = { x: 100, y: 180, width: 90, height: 60, speedX: 5.5, direction: 1 };
+    const enemyCompressor = { x: 500, y: 100, width: 90, height: 60, speedX: 4.5, direction: -1 };
+
+    function addMessage(text, x, y, color) {
+        messages.push({ text, x, y, color, life: 60, maxLife: 60 });
+    }
+
+    // --- Dessin ---
+    function drawBrandLogo(ctx, x, y, width, height) {
+        ctx.save();
+        ctx.translate(x, y);
+        const scaleX = width / 100;
+        const scaleY = height / 100;
+        ctx.scale(scaleX, scaleY);
+        ctx.fillStyle = "#006cb8";
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(35, 25); ctx.lineTo(35, 75); ctx.lineTo(0, 100); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(100, 0); ctx.lineTo(65, 25); ctx.lineTo(65, 75); ctx.lineTo(100, 100); ctx.fill();
+        ctx.fillStyle = "#808285";
+        ctx.beginPath(); ctx.moveTo(35, 25); ctx.lineTo(50, 40); ctx.lineTo(65, 25); ctx.lineTo(65, 75); ctx.lineTo(50, 90); ctx.lineTo(35, 75); ctx.fill();
+        ctx.restore();
+    }
+
+    function drawScenery() {
+        const groundGrad = ctx.createLinearGradient(0, goalHeight, 0, canvas.height);
+        groundGrad.addColorStop(0, "#166534"); groundGrad.addColorStop(1, "#22c55e");
+        ctx.fillStyle = groundGrad; ctx.fillRect(0, goalHeight, canvas.width, canvas.height - goalHeight);
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
+        for (let i = goalHeight; i < canvas.height; i += 40) {
+            if (((i - goalHeight) / 40) % 2 === 0) ctx.fillRect(0, i, canvas.width, 40);
+        }
+
+        ctx.globalAlpha = 0.08; drawBrandLogo(ctx, canvas.width / 2 - 125, goalHeight + 40, 250, 250); ctx.globalAlpha = 1.0;
+
+        const skyGrad = ctx.createRadialGradient(canvas.width/2, canvas.height, 10, canvas.width/2, 0, canvas.height);
+        skyGrad.addColorStop(0, "#1e3a5f");
+        skyGrad.addColorStop(1, "#0f172a");
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, canvas.width, goalHeight);
+
+        // Logo en fond sur le filet (derrière le filet)
+        if (bgLogo.complete) {
+            ctx.globalAlpha = 0.25; // Semi-transparent
+            const ratio = bgLogo.width / bgLogo.height;
+            const h = 100;
+            const w = h * ratio;
+            ctx.drawImage(bgLogo, canvas.width / 2 - w / 2, goalHeight / 2 - h / 2 - 10, w, h);
+            ctx.globalAlpha = 1.0;
+        }
+
+        // VRAI FILET (Épais et visible - remis en place !)
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; // Grille blanche semi-transparente
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        // Lignes verticales
+        for (let i = 0; i <= canvas.width; i += 30) { 
+            ctx.moveTo(i, 0); 
+            ctx.lineTo(i, goalHeight); 
+        }
+        // Lignes horizontales
+        for (let j = 0; j <= goalHeight; j += 30) { 
+            ctx.moveTo(0, j); 
+            ctx.lineTo(canvas.width, j); 
+        }
+        ctx.stroke();
+
+        // Poteaux et barre transversale du but
+        ctx.fillStyle = "#cbd5e1"; // Gris clair métallique
+        ctx.fillRect(0, 0, canvas.width, 10); // Barre transversale (en haut)
+        ctx.fillRect(0, 0, 10, goalHeight); // Poteau gauche
+        ctx.fillRect(canvas.width - 10, 0, 10, goalHeight); // Poteau droit
+
+        // Ligne de but lumineuse
+        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "white";
+        ctx.fillRect(0, goalHeight - 3, canvas.width, 3); 
+        ctx.shadowBlur = 0;
+    }
+
+    function drawCompressor() {
+        ctx.save(); ctx.shadowBlur = 15; ctx.shadowColor = "#006cb8";
+        const compGrad = ctx.createLinearGradient(compressor.x, compressor.y, compressor.x, compressor.y + compressor.height);
+        compGrad.addColorStop(0, "#008ae6"); compGrad.addColorStop(1, "#004a80");
+        ctx.fillStyle = compGrad; ctx.fillRect(compressor.x, compressor.y, compressor.width, compressor.height);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#1e293b"; ctx.fillRect(compressor.x + 10, compressor.y + 10, 25, 40);
+        ctx.fillStyle = "#0f172a"; for(let i=0; i<4; i++) ctx.fillRect(compressor.x + 12, compressor.y + 12 + (i*9), 21, 4);
+        
+        ctx.fillStyle = "white"; ctx.font = "900 12px Outfit"; ctx.textAlign = "center"; 
+        ctx.fillText("mauguière", compressor.x + compressor.width / 2, compressor.y + 45, compressor.width - 10);
+        ctx.restore();
+    }
+
+    function drawEnemyCompressor() {
+        ctx.save(); ctx.shadowBlur = 15; ctx.shadowColor = "#ef4444";
+        const compGrad = ctx.createLinearGradient(enemyCompressor.x, enemyCompressor.y, enemyCompressor.x, enemyCompressor.y + enemyCompressor.height);
+        compGrad.addColorStop(0, "#ef4444"); compGrad.addColorStop(1, "#991b1b");
+        ctx.fillStyle = compGrad; ctx.fillRect(enemyCompressor.x, enemyCompressor.y, enemyCompressor.width, enemyCompressor.height);
+        ctx.shadowBlur = 0; 
+        ctx.fillStyle = "#1e293b"; ctx.fillRect(enemyCompressor.x + 10, enemyCompressor.y + 10, 25, 40); 
+        ctx.fillStyle = "#0f172a"; for(let i=0; i<4; i++) ctx.fillRect(enemyCompressor.x + 12, enemyCompressor.y + 12 + (i*9), 21, 4);
+        ctx.strokeStyle = "#f87171"; ctx.lineWidth = 4; ctx.beginPath();
+        ctx.moveTo(enemyCompressor.x + 50, enemyCompressor.y + 15); ctx.lineTo(enemyCompressor.x + 65, enemyCompressor.y + 30);
+        ctx.moveTo(enemyCompressor.x + 65, enemyCompressor.y + 15); ctx.lineTo(enemyCompressor.x + 50, enemyCompressor.y + 30); ctx.stroke();
+        
+        ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.font = "bold 11px Outfit"; ctx.textAlign = "center"; 
+        ctx.fillText("concurrent", enemyCompressor.x + enemyCompressor.width / 2, enemyCompressor.y + 45, enemyCompressor.width - 10);
+        ctx.restore();
+    }
+
+    function drawBall() {
+        ballTrails.forEach((t) => {
+            ctx.globalAlpha = t.life / 10; ctx.fillStyle = "#e2e8f0"; ctx.beginPath(); ctx.arc(t.x, t.y, ball.radius * (t.life/10), 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.globalAlpha = 1.0; ctx.save(); ctx.translate(ball.x, ball.y); ctx.rotate(ball.rotation);
+        ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2); ctx.fillStyle = "#f8fafc"; ctx.fill();
+        ctx.fillStyle = "#1e293b"; ctx.beginPath(); ctx.arc(0, 0, ball.radius * 0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-8, -8, ball.radius * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(8, -8, ball.radius * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(0, 10, ball.radius * 0.25, 0, Math.PI * 2); ctx.fill();
+        const shadow = ctx.createRadialGradient(-3, -3, 2, 0, 0, ball.radius);
+        shadow.addColorStop(0, "rgba(255,255,255,0.4)"); shadow.addColorStop(1, "rgba(0,0,0,0.5)");
+        ctx.fillStyle = shadow; ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        if (!ball.isShooting) {
+            ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(ball.x, ball.y + ball.radius + 3, ball.radius, ball.radius/4, 0, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    function drawMessages() {
+        messages.forEach((msg, i) => {
+            ctx.fillStyle = msg.color; ctx.font = "900 30px Outfit"; ctx.textAlign = "center"; ctx.globalAlpha = msg.life / msg.maxLife;
+            ctx.shadowBlur = 10; ctx.shadowColor = msg.color;
+            const yPos = msg.y - (msg.maxLife - msg.life) * 1.5; ctx.fillText(msg.text, msg.x, yPos);
+            ctx.shadowBlur = 0; ctx.globalAlpha = 1.0; msg.life--; if (msg.life <= 0) messages.splice(i, 1);
+        });
+    }
+
+    // --- Moteur de jeu ---
+    function update() {
+        if (!gameActive) return;
+
+        if (ball.isShooting) { ballTrails.push({x: ball.x, y: ball.y, life: 10}); }
+        for(let i = ballTrails.length-1; i >= 0; i--) { ballTrails[i].life--; if(ballTrails[i].life <= 0) ballTrails.splice(i, 1); }
+
+        compressor.x += compressor.speedX * compressor.direction;
+        if (compressor.x + compressor.width >= canvas.width || compressor.x <= 0) compressor.direction *= -1;
+
+        enemyCompressor.x += enemyCompressor.speedX * enemyCompressor.direction;
+        if (enemyCompressor.x + enemyCompressor.width >= canvas.width || enemyCompressor.x <= 0) enemyCompressor.direction *= -1;
+
+        if (!ball.isShooting) {
+            ball.x += ball.speedX * ball.direction;
+            ball.rotation += 0.2 * ball.direction;
+            
+            // Correction du bug : on force la balle à rester mathématiquement dans l'écran
+            if (ball.x + ball.radius >= canvas.width) {
+                ball.x = canvas.width - ball.radius;
+                ball.direction *= -1;
+            } else if (ball.x - ball.radius <= 0) {
+                ball.x = ball.radius;
+                ball.direction *= -1;
+            }
+        } else {
+            ball.y -= ball.speedY;
+            ball.rotation += 0.6;
+
+            const hitCompressor = ball.y - ball.radius <= compressor.y + compressor.height && ball.y + ball.radius >= compressor.y && ball.x >= compressor.x && ball.x <= compressor.x + compressor.width;
+            const hitEnemy = ball.y - ball.radius <= enemyCompressor.y + enemyCompressor.height && ball.y + ball.radius >= enemyCompressor.y && ball.x >= enemyCompressor.x && ball.x <= enemyCompressor.x + enemyCompressor.width;
+
+            if (hitCompressor) {
+                score += 500; scoreDisplay.innerText = score; addMessage(`+500 COMBO !`, ball.x, ball.y, "#06b6d4"); resetBall();
+            } else if (hitEnemy) {
+                score -= 300; scoreDisplay.innerText = score; addMessage(`-300 OUPS !`, ball.x, ball.y, "#ef4444"); resetBall();
+            } else if (ball.y <= 120) {
+                score += 10; scoreDisplay.innerText = score; addMessage(`+10 BUT`, ball.x, ball.y, "#4ade80"); resetBall();
+            } else if (ball.y < -50) {
+                resetBall();
+            }
+        }
+    }
+
+    function resetBall() {
+        ball.isShooting = false; ball.y = canvas.height - 40; ball.speedY = 0;
+        ball.direction = Math.random() > 0.5 ? 1 : -1; ball.speedX = 6 + Math.random() * 5;
+    }
+
+    function shoot() {
+        if (!gameActive || ball.isShooting) return;
+        ball.isShooting = true; ball.speedY = 22;
+        gameHint.style.display = 'none'; // Cache l'indice après le 1er tir
+    }
+
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawScenery(); drawCompressor(); drawEnemyCompressor(); drawBall(); drawMessages();
+        update();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // --- Contrôle du flux ---
+    function startGame() {
+        score = 0; timeLeft = 30; gameActive = true; messages = []; ballTrails = [];
+        resetBall();
+        
+        // Réinitialise le bouton de partage pour la nouvelle partie
+        const btnShare = document.getElementById('btn-share');
+        if(btnShare) {
+            btnShare.innerText = "PARTAGER À UN AMI (+500 PTS)";
+            btnShare.style.background = "linear-gradient(135deg, #f59e0b, #d97706)";
+            btnShare.style.cursor = "pointer";
+            btnShare.disabled = false;
+        }
+
+        scoreDisplay.innerText = score; timeDisplay.innerText = `${timeLeft}s`;
+        
+        // Cache tous les menus
+        screenStart.style.display = 'none';
+        screenSave.style.display = 'none';
+        screenLeaderboard.style.display = 'none';
+        overlay.style.display = 'none';
+        gameHint.style.display = 'block';
+
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (gameActive) {
+                timeLeft--; timeDisplay.innerText = `${timeLeft}s`;
+                if (timeLeft <= 0) endGame();
+            }
+        }, 1000);
+    }
+
+    function endGame() {
+        gameActive = false; clearInterval(timerInterval);
+        
+        document.getElementById('final-score').innerText = score;
+        
+        // Affiche l'écran de sauvegarde (Fin de jeu)
+        overlay.style.display = 'flex';
+        screenSave.style.display = 'flex';
+    }
+
+    // --- Inputs du joueur ---
+    canvas.addEventListener('mousedown', shoot);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); shoot(); }, {passive: false});
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            if (document.activeElement.tagName === 'INPUT') return;
+            e.preventDefault();
+            if (gameActive) shoot();
+        }
+    });
+
+    // Lance l'animation en tâche de fond (menu)
+    requestAnimationFrame(gameLoop);
+
+</script>
+</body>
+</html>
