@@ -30,8 +30,13 @@
         }
 
         body {
-            background: radial-gradient(circle at center top, #1e293b, var(--bg-dark));
+            background:
+                radial-gradient(circle at 20% 0%, rgba(0, 108, 184, 0.25), transparent 45%),
+                radial-gradient(circle at 80% 10%, rgba(251, 191, 36, 0.12), transparent 40%),
+                radial-gradient(circle at center top, #1e293b, var(--bg-dark));
             background-attachment: fixed;
+            background-size: 200% 200%, 200% 200%, 100% 100%;
+            animation: ambientShift 18s ease-in-out infinite alternate;
             color: var(--text-light);
             font-family: 'Outfit', sans-serif;
             display: flex;
@@ -39,6 +44,11 @@
             align-items: center;
             overflow: hidden;
             touch-action: manipulation;
+        }
+
+        @keyframes ambientShift {
+            0% { background-position: 0% 0%, 100% 0%, 0 0; }
+            100% { background-position: 40% 30%, 60% 20%, 0 0; }
         }
 
         /* --- En-tête --- */
@@ -123,13 +133,27 @@
         .stats {
             display: flex;
             justify-content: space-between;
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 900;
             text-shadow: 0 4px 10px rgba(0, 0, 0, 0.8);
         }
 
+        #score-display, #time-display {
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 999px;
+            padding: 6px 18px;
+            min-width: 60px;
+            text-align: center;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+        }
+
         #score-display { color: #4ade80; }
         #time-display { color: #f87171; }
+        #time-display::before { content: "⏱ "; font-size: 16px; }
+        #score-display::before { content: "⚽ "; font-size: 16px; }
 
         /* --- Écrans de menu (Overlay) --- */
         #overlay {
@@ -719,6 +743,64 @@
     let messages = [];
     let ballTrails = [];
 
+    // --- État visuel (graphismes uniquement) ---
+    let particles = [];      // Particules d'impact (gerbes d'étincelles)
+    let confetti = [];        // Confettis sur les gros scores
+    let screenShake = 0;      // Intensité du tremblement d'écran
+    let globalTime = 0;       // Horloge globale pour les animations
+    let flash = 0;            // Flash plein écran à l'impact
+    let flashColor = "#ffffff";
+
+    // Étoiles scintillantes en arrière-plan du ciel de stade
+    const stars = Array.from({ length: 60 }, () => ({
+        x: Math.random() * 800,
+        y: Math.random() * 250,
+        r: Math.random() * 1.4 + 0.3,
+        tw: Math.random() * Math.PI * 2
+    }));
+    // Spectateurs (points lumineux animés dans les tribunes)
+    const crowd = Array.from({ length: 220 }, () => ({
+        x: Math.random() * 800,
+        y: 12 + Math.random() * 60,
+        hue: Math.random() * 360,
+        ph: Math.random() * Math.PI * 2
+    }));
+
+    function spawnParticles(x, y, color, count = 26, power = 1) {
+        for (let i = 0; i < count; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = (2 + Math.random() * 7) * power;
+            particles.push({
+                x, y,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp - 2,
+                life: 1,
+                decay: 0.02 + Math.random() * 0.03,
+                size: 2 + Math.random() * 3.5,
+                color
+            });
+        }
+    }
+
+    function spawnConfetti(x, y) {
+        const colors = ["#06b6d4", "#22d3ee", "#fbbf24", "#34d399", "#60a5fa", "#ffffff"];
+        for (let i = 0; i < 60; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = 3 + Math.random() * 9;
+            confetti.push({
+                x, y,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp - 6,
+                life: 1,
+                decay: 0.008 + Math.random() * 0.012,
+                size: 4 + Math.random() * 5,
+                rot: Math.random() * Math.PI,
+                vr: (Math.random() - 0.5) * 0.4,
+                color: colors[(Math.random() * colors.length) | 0]
+            });
+        }
+    }
+
     // --- Images ---
     const bgLogo = new Image();
     bgLogo.src = "https://multiairfrance.store/calculateurs/logos/logo%20mauguiere%20blanc.webp";
@@ -749,118 +831,347 @@
     }
 
     function drawScenery() {
-        const groundGrad = ctx.createLinearGradient(0, goalHeight, 0, canvas.height);
-        groundGrad.addColorStop(0, "#166534"); groundGrad.addColorStop(1, "#22c55e");
-        ctx.fillStyle = groundGrad; ctx.fillRect(0, goalHeight, canvas.width, canvas.height - goalHeight);
+        const W = canvas.width, H = canvas.height;
 
-        ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
-        for (let i = goalHeight; i < canvas.height; i += 40) {
-            if (((i - goalHeight) / 40) % 2 === 0) ctx.fillRect(0, i, canvas.width, 40);
+        // ===== CIEL DE STADE EN NOCTURNE =====
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, goalHeight);
+        skyGrad.addColorStop(0, "#0b1220");
+        skyGrad.addColorStop(0.55, "#13243f");
+        skyGrad.addColorStop(1, "#1b3358");
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, W, goalHeight);
+
+        // Étoiles scintillantes
+        stars.forEach(s => {
+            const a = 0.3 + 0.5 * (0.5 + 0.5 * Math.sin(globalTime * 0.05 + s.tw));
+            ctx.globalAlpha = a;
+            ctx.fillStyle = "#dbeafe";
+            ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+
+        // Tribunes (bandeau sombre) + spectateurs scintillants
+        const standGrad = ctx.createLinearGradient(0, 0, 0, 78);
+        standGrad.addColorStop(0, "#0a0f1a");
+        standGrad.addColorStop(1, "rgba(10,15,26,0)");
+        ctx.fillStyle = standGrad;
+        ctx.fillRect(0, 0, W, 80);
+        crowd.forEach(c => {
+            const tw = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(globalTime * 0.12 + c.ph));
+            ctx.globalAlpha = tw;
+            ctx.fillStyle = `hsl(${c.hue}, 70%, 65%)`;
+            ctx.fillRect(c.x, c.y, 2.2, 2.2);
+        });
+        ctx.globalAlpha = 1;
+
+        // Projecteurs / halos de stade
+        for (const px of [W * 0.18, W * 0.82]) {
+            const beam = ctx.createRadialGradient(px, -20, 10, px, 120, 240);
+            beam.addColorStop(0, "rgba(186, 230, 253, 0.18)");
+            beam.addColorStop(1, "rgba(186, 230, 253, 0)");
+            ctx.fillStyle = beam;
+            ctx.beginPath(); ctx.moveTo(px, -10); ctx.lineTo(px - 130, goalHeight); ctx.lineTo(px + 130, goalHeight); ctx.closePath(); ctx.fill();
+            // Pylône lumineux
+            ctx.fillStyle = "#e2e8f0";
+            ctx.shadowBlur = 18; ctx.shadowColor = "#bae6fd";
+            ctx.fillRect(px - 10, 4, 20, 8);
+            ctx.shadowBlur = 0;
         }
 
-        ctx.globalAlpha = 0.08; drawBrandLogo(ctx, canvas.width / 2 - 125, goalHeight + 40, 250, 250); ctx.globalAlpha = 1.0;
-
-        const skyGrad = ctx.createRadialGradient(canvas.width/2, canvas.height, 10, canvas.width/2, 0, canvas.height);
-        skyGrad.addColorStop(0, "#1e3a5f");
-        skyGrad.addColorStop(1, "#0f172a");
-        ctx.fillStyle = skyGrad;
-        ctx.fillRect(0, 0, canvas.width, goalHeight);
-
-        // Logo en fond sur le filet (derrière le filet)
+        // ===== CADRE / FILET DU BUT =====
+        // Logo en fond sur le filet
         if (bgLogo.complete) {
-            ctx.globalAlpha = 0.25; // Semi-transparent
+            ctx.globalAlpha = 0.22;
             const ratio = bgLogo.width / bgLogo.height;
-            const h = 100;
+            const h = 110;
             const w = h * ratio;
-            ctx.drawImage(bgLogo, canvas.width / 2 - w / 2, goalHeight / 2 - h / 2 - 10, w, h);
+            ctx.drawImage(bgLogo, W / 2 - w / 2, goalHeight / 2 - h / 2 - 18, w, h);
             ctx.globalAlpha = 1.0;
         }
 
-        // VRAI FILET (Épais et visible - remis en place !)
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; // Grille blanche semi-transparente
-        ctx.lineWidth = 1.5;
+        // Filet animé (légère ondulation)
+        ctx.save();
+        ctx.strokeStyle = "rgba(226, 232, 240, 0.22)";
+        ctx.lineWidth = 1;
+        const wob = Math.sin(globalTime * 0.06) * 2;
         ctx.beginPath();
-        // Lignes verticales
-        for (let i = 0; i <= canvas.width; i += 30) { 
-            ctx.moveTo(i, 0); 
-            ctx.lineTo(i, goalHeight); 
+        for (let i = 0; i <= W; i += 26) {
+            ctx.moveTo(i, 12);
+            ctx.lineTo(i + wob * (i / W), goalHeight);
         }
-        // Lignes horizontales
-        for (let j = 0; j <= goalHeight; j += 30) { 
-            ctx.moveTo(0, j); 
-            ctx.lineTo(canvas.width, j); 
+        for (let j = 12; j <= goalHeight; j += 26) {
+            ctx.moveTo(0, j);
+            ctx.lineTo(W, j + Math.sin(globalTime * 0.05 + j) * 1.2);
         }
         ctx.stroke();
+        ctx.restore();
 
-        // Poteaux et barre transversale du but
-        ctx.fillStyle = "#cbd5e1"; // Gris clair métallique
-        ctx.fillRect(0, 0, canvas.width, 10); // Barre transversale (en haut)
-        ctx.fillRect(0, 0, 10, goalHeight); // Poteau gauche
-        ctx.fillRect(canvas.width - 10, 0, 10, goalHeight); // Poteau droit
+        // Poteaux & barre — métal brillant avec liseré néon
+        const postGrad = ctx.createLinearGradient(0, 0, 0, goalHeight);
+        postGrad.addColorStop(0, "#f1f5f9");
+        postGrad.addColorStop(0.5, "#cbd5e1");
+        postGrad.addColorStop(1, "#94a3b8");
+        ctx.fillStyle = postGrad;
+        ctx.shadowBlur = 14; ctx.shadowColor = "rgba(0,108,184,0.6)";
+        ctx.fillRect(0, 0, W, 12);          // barre transversale
+        ctx.fillRect(0, 0, 12, goalHeight); // poteau gauche
+        ctx.fillRect(W - 12, 0, 12, goalHeight); // poteau droit
+        ctx.shadowBlur = 0;
+        // Reflets sur les poteaux
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.fillRect(2, 0, 2, goalHeight);
+        ctx.fillRect(W - 10, 0, 2, goalHeight);
+        ctx.fillRect(0, 2, W, 2);
+
+        // ===== PELOUSE EN PERSPECTIVE =====
+        const groundGrad = ctx.createLinearGradient(0, goalHeight, 0, H);
+        groundGrad.addColorStop(0, "#14532d");
+        groundGrad.addColorStop(1, "#22c55e");
+        ctx.fillStyle = groundGrad;
+        ctx.fillRect(0, goalHeight, W, H - goalHeight);
+
+        // Bandes de tonte en perspective (trapèzes qui s'élargissent vers le bas)
+        const cx = W / 2;
+        const stripes = 8;
+        for (let i = 0; i < stripes; i++) {
+            if (i % 2 !== 0) continue;
+            const t0 = i / stripes, t1 = (i + 1) / stripes;
+            const topY = goalHeight, botY = H;
+            const topW = W * 0.9, botW = W * 2.2;
+            const xTop0 = cx + (t0 - 0.5) * topW, xTop1 = cx + (t1 - 0.5) * topW;
+            const xBot0 = cx + (t0 - 0.5) * botW, xBot1 = cx + (t1 - 0.5) * botW;
+            ctx.fillStyle = "rgba(255,255,255,0.06)";
+            ctx.beginPath();
+            ctx.moveTo(xTop0, topY); ctx.lineTo(xTop1, topY);
+            ctx.lineTo(xBot1, botY); ctx.lineTo(xBot0, botY);
+            ctx.closePath(); ctx.fill();
+        }
+
+        // Logo filigrane sur la pelouse
+        ctx.globalAlpha = 0.07;
+        drawBrandLogo(ctx, cx - 130, goalHeight + 55, 260, 260);
+        ctx.globalAlpha = 1.0;
 
         // Ligne de but lumineuse
-        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = "white";
-        ctx.fillRect(0, goalHeight - 3, canvas.width, 3); 
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.shadowBlur = 12; ctx.shadowColor = "#ffffff";
+        ctx.fillRect(0, goalHeight - 3, W, 4);
         ctx.shadowBlur = 0;
+
+        // Point de penalty & arc
+        ctx.strokeStyle = "rgba(255,255,255,0.5)";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(cx, H - 30, 70, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.beginPath(); ctx.arc(cx, H - 70, 4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Dessine un compresseur stylisé moderne (carrosserie arrondie + cuve + manomètre)
+    function drawCompressorBody(o, opts) {
+        const { x, y, width: w, height: h } = o;
+        const r = 12; // arrondi
+        const bob = Math.sin(globalTime * 0.08 + opts.phase) * 3; // léger flottement
+        ctx.save();
+        ctx.translate(0, bob);
+
+        // Halo lumineux pulsé
+        const pulse = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(globalTime * 0.1 + opts.phase));
+        ctx.shadowBlur = 28 * pulse;
+        ctx.shadowColor = opts.glow;
+
+        // Carrosserie arrondie avec dégradé
+        const g = ctx.createLinearGradient(x, y, x, y + h);
+        g.addColorStop(0, opts.c0);
+        g.addColorStop(0.5, opts.c1);
+        g.addColorStop(1, opts.c2);
+        ctx.fillStyle = g;
+        roundRect(x, y, w, h, r); ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Reflet brillant en haut
+        const gloss = ctx.createLinearGradient(x, y, x, y + h * 0.45);
+        gloss.addColorStop(0, "rgba(255,255,255,0.35)");
+        gloss.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gloss;
+        roundRect(x + 4, y + 3, w - 8, h * 0.45, r * 0.7); ctx.fill();
+
+        // Liseré néon
+        ctx.strokeStyle = opts.edge; ctx.lineWidth = 2;
+        roundRect(x, y, w, h, r); ctx.stroke();
+
+        // Cuve / grille latérale
+        ctx.fillStyle = "rgba(15,23,42,0.85)";
+        roundRect(x + 9, y + 11, 24, h - 22, 5); ctx.fill();
+        ctx.fillStyle = "rgba(148,163,184,0.55)";
+        for (let i = 0; i < 4; i++) ctx.fillRect(x + 11, y + 14 + i * 8, 20, 3);
+
+        // Manomètre lumineux
+        const gx = x + w - 18, gy = y + 16;
+        ctx.fillStyle = "#0f172a";
+        ctx.beginPath(); ctx.arc(gx, gy, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = opts.edge; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(gx, gy, 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 1.5;
+        const ang = -Math.PI / 2 + Math.sin(globalTime * 0.15 + opts.phase) * 0.9;
+        ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + Math.cos(ang) * 6, gy + Math.sin(ang) * 6); ctx.stroke();
+
+        opts.badge(o);
+        ctx.restore();
     }
 
     function drawCompressor() {
-        ctx.save(); ctx.shadowBlur = 15; ctx.shadowColor = "#006cb8";
-        const compGrad = ctx.createLinearGradient(compressor.x, compressor.y, compressor.x, compressor.y + compressor.height);
-        compGrad.addColorStop(0, "#008ae6"); compGrad.addColorStop(1, "#004a80");
-        ctx.fillStyle = compGrad; ctx.fillRect(compressor.x, compressor.y, compressor.width, compressor.height);
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = "#1e293b"; ctx.fillRect(compressor.x + 10, compressor.y + 10, 25, 40);
-        ctx.fillStyle = "#0f172a"; for(let i=0; i<4; i++) ctx.fillRect(compressor.x + 12, compressor.y + 12 + (i*9), 21, 4);
-        
-        ctx.fillStyle = "white"; ctx.font = "900 12px Outfit"; ctx.textAlign = "center"; 
-        ctx.fillText("mauguière", compressor.x + compressor.width / 2, compressor.y + 45, compressor.width - 10);
-        ctx.restore();
+        drawCompressorBody(compressor, {
+            c0: "#38bdf8", c1: "#0284c7", c2: "#03396b",
+            glow: "#06b6d4", edge: "rgba(125,211,252,0.9)", phase: 0,
+            badge: (o) => {
+                ctx.fillStyle = "#fff";
+                ctx.font = "900 12px Outfit"; ctx.textAlign = "center";
+                ctx.shadowBlur = 6; ctx.shadowColor = "rgba(0,0,0,0.5)";
+                ctx.fillText("mauguière", o.x + o.width / 2, o.y + o.height - 12, o.width - 8);
+                ctx.shadowBlur = 0;
+                // Pastille "+500"
+                ctx.fillStyle = "#22d3ee";
+                ctx.font = "900 10px Outfit";
+                ctx.fillText("+500", o.x + o.width / 2, o.y + o.height + 14);
+            }
+        });
     }
 
     function drawEnemyCompressor() {
-        ctx.save(); ctx.shadowBlur = 15; ctx.shadowColor = "#ef4444";
-        const compGrad = ctx.createLinearGradient(enemyCompressor.x, enemyCompressor.y, enemyCompressor.x, enemyCompressor.y + enemyCompressor.height);
-        compGrad.addColorStop(0, "#ef4444"); compGrad.addColorStop(1, "#991b1b");
-        ctx.fillStyle = compGrad; ctx.fillRect(enemyCompressor.x, enemyCompressor.y, enemyCompressor.width, enemyCompressor.height);
-        ctx.shadowBlur = 0; 
-        ctx.fillStyle = "#1e293b"; ctx.fillRect(enemyCompressor.x + 10, enemyCompressor.y + 10, 25, 40); 
-        ctx.fillStyle = "#0f172a"; for(let i=0; i<4; i++) ctx.fillRect(enemyCompressor.x + 12, enemyCompressor.y + 12 + (i*9), 21, 4);
-        ctx.strokeStyle = "#f87171"; ctx.lineWidth = 4; ctx.beginPath();
-        ctx.moveTo(enemyCompressor.x + 50, enemyCompressor.y + 15); ctx.lineTo(enemyCompressor.x + 65, enemyCompressor.y + 30);
-        ctx.moveTo(enemyCompressor.x + 65, enemyCompressor.y + 15); ctx.lineTo(enemyCompressor.x + 50, enemyCompressor.y + 30); ctx.stroke();
-        
-        ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.font = "bold 11px Outfit"; ctx.textAlign = "center"; 
-        ctx.fillText("concurrent", enemyCompressor.x + enemyCompressor.width / 2, enemyCompressor.y + 45, enemyCompressor.width - 10);
-        ctx.restore();
+        drawCompressorBody(enemyCompressor, {
+            c0: "#f87171", c1: "#dc2626", c2: "#7f1d1d",
+            glow: "#ef4444", edge: "rgba(252,165,165,0.9)", phase: 2.1,
+            badge: (o) => {
+                // Croix d'interdiction
+                ctx.strokeStyle = "#fecaca"; ctx.lineWidth = 4; ctx.lineCap = "round";
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.width - 30, o.y + 12); ctx.lineTo(o.x + o.width - 16, o.y + 26);
+                ctx.moveTo(o.x + o.width - 16, o.y + 12); ctx.lineTo(o.x + o.width - 30, o.y + 26);
+                ctx.stroke(); ctx.lineCap = "butt";
+                ctx.fillStyle = "rgba(255,255,255,0.85)";
+                ctx.font = "bold 11px Outfit"; ctx.textAlign = "center";
+                ctx.fillText("concurrent", o.x + o.width / 2, o.y + o.height - 12, o.width - 8);
+                ctx.fillStyle = "#fca5a5";
+                ctx.font = "900 10px Outfit";
+                ctx.fillText("-300", o.x + o.width / 2, o.y + o.height + 14);
+            }
+        });
+    }
+
+    // Helper: rectangle arrondi
+    function roundRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
     }
 
     function drawBall() {
+        // Traînée lumineuse (motion blur)
         ballTrails.forEach((t) => {
-            ctx.globalAlpha = t.life / 10; ctx.fillStyle = "#e2e8f0"; ctx.beginPath(); ctx.arc(t.x, t.y, ball.radius * (t.life/10), 0, Math.PI * 2); ctx.fill();
+            const a = t.life / 10;
+            ctx.globalAlpha = a * 0.6;
+            const tg = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, ball.radius * (a + 0.3));
+            tg.addColorStop(0, "rgba(186,230,253,0.9)");
+            tg.addColorStop(1, "rgba(186,230,253,0)");
+            ctx.fillStyle = tg;
+            ctx.beginPath(); ctx.arc(t.x, t.y, ball.radius * (a + 0.4), 0, Math.PI * 2); ctx.fill();
         });
-        ctx.globalAlpha = 1.0; ctx.save(); ctx.translate(ball.x, ball.y); ctx.rotate(ball.rotation);
-        ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2); ctx.fillStyle = "#f8fafc"; ctx.fill();
-        ctx.fillStyle = "#1e293b"; ctx.beginPath(); ctx.arc(0, 0, ball.radius * 0.4, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(-8, -8, ball.radius * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(8, -8, ball.radius * 0.25, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(0, 10, ball.radius * 0.25, 0, Math.PI * 2); ctx.fill();
-        const shadow = ctx.createRadialGradient(-3, -3, 2, 0, 0, ball.radius);
-        shadow.addColorStop(0, "rgba(255,255,255,0.4)"); shadow.addColorStop(1, "rgba(0,0,0,0.5)");
-        ctx.fillStyle = shadow; ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
+        ctx.globalAlpha = 1.0;
+
+        // Ombre portée au sol (uniquement au repos)
         if (!ball.isShooting) {
-            ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.beginPath(); ctx.ellipse(ball.x, ball.y + ball.radius + 3, ball.radius, ball.radius/4, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "rgba(0,0,0,0.35)";
+            ctx.beginPath();
+            ctx.ellipse(ball.x, ball.y + ball.radius + 4, ball.radius * 1.1, ball.radius / 3.5, 0, 0, Math.PI * 2);
+            ctx.fill();
         }
+
+        ctx.save();
+        ctx.translate(ball.x, ball.y);
+        ctx.rotate(ball.rotation);
+
+        // Sphère blanche de base
+        ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#f8fafc"; ctx.fill();
+
+        // Pentagones (motif ballon)
+        ctx.fillStyle = "#1e293b";
+        ctx.beginPath(); ctx.arc(0, 0, ball.radius * 0.38, 0, Math.PI * 2); ctx.fill();
+        for (let k = 0; k < 5; k++) {
+            const a = (k / 5) * Math.PI * 2;
+            const px = Math.cos(a) * ball.radius * 0.7;
+            const py = Math.sin(a) * ball.radius * 0.7;
+            ctx.beginPath(); ctx.arc(px, py, ball.radius * 0.18, 0, Math.PI * 2); ctx.fill();
+        }
+
+        // Ombrage volumétrique
+        const shade = ctx.createRadialGradient(-ball.radius * 0.35, -ball.radius * 0.35, 1, 0, 0, ball.radius);
+        shade.addColorStop(0, "rgba(255,255,255,0.55)");
+        shade.addColorStop(0.5, "rgba(255,255,255,0)");
+        shade.addColorStop(1, "rgba(0,0,0,0.45)");
+        ctx.fillStyle = shade;
+        ctx.beginPath(); ctx.arc(0, 0, ball.radius, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+
+        // Reflet spéculaire fixe (ne tourne pas avec la balle)
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.beginPath(); ctx.arc(ball.x - ball.radius * 0.35, ball.y - ball.radius * 0.4, ball.radius * 0.22, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawParticles() {
+        // Étincelles d'impact
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.vx *= 0.98;
+            p.life -= p.decay;
+            if (p.life <= 0) { particles.splice(i, 1); continue; }
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.fillStyle = p.color;
+            ctx.shadowBlur = 8; ctx.shadowColor = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+
+        // Confettis (gros score)
+        for (let i = confetti.length - 1; i >= 0; i--) {
+            const c = confetti[i];
+            c.x += c.vx; c.y += c.vy; c.vy += 0.18; c.vx *= 0.99; c.rot += c.vr;
+            c.life -= c.decay;
+            if (c.life <= 0 || c.y > canvas.height + 20) { confetti.splice(i, 1); continue; }
+            ctx.globalAlpha = Math.max(0, c.life);
+            ctx.save();
+            ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+            ctx.fillStyle = c.color;
+            ctx.fillRect(-c.size / 2, -c.size / 4, c.size, c.size / 2);
+            ctx.restore();
+        }
+        ctx.globalAlpha = 1;
     }
 
     function drawMessages() {
         messages.forEach((msg, i) => {
-            ctx.fillStyle = msg.color; ctx.font = "900 30px Outfit"; ctx.textAlign = "center"; ctx.globalAlpha = msg.life / msg.maxLife;
-            ctx.shadowBlur = 10; ctx.shadowColor = msg.color;
-            const yPos = msg.y - (msg.maxLife - msg.life) * 1.5; ctx.fillText(msg.text, msg.x, yPos);
-            ctx.shadowBlur = 0; ctx.globalAlpha = 1.0; msg.life--; if (msg.life <= 0) messages.splice(i, 1);
+            const t = msg.life / msg.maxLife;
+            const pop = msg.life > msg.maxLife - 8 ? 1 + (msg.maxLife - msg.life) * 0.06 : 1.15 - (1 - t) * 0.15;
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, t * 1.6);
+            const yPos = msg.y - (msg.maxLife - msg.life) * 1.6;
+            ctx.translate(msg.x, yPos);
+            ctx.scale(pop, pop);
+            ctx.textAlign = "center";
+            ctx.font = "900 30px Outfit";
+            ctx.lineWidth = 4; ctx.strokeStyle = "rgba(0,0,0,0.55)";
+            ctx.strokeText(msg.text, 0, 0);
+            ctx.shadowBlur = 14; ctx.shadowColor = msg.color;
+            ctx.fillStyle = msg.color;
+            ctx.fillText(msg.text, 0, 0);
+            ctx.restore();
+            msg.life--; if (msg.life <= 0) messages.splice(i, 1);
         });
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
     }
 
     // --- Moteur de jeu ---
@@ -896,11 +1207,21 @@
             const hitEnemy = ball.y - ball.radius <= enemyCompressor.y + enemyCompressor.height && ball.y + ball.radius >= enemyCompressor.y && ball.x >= enemyCompressor.x && ball.x <= enemyCompressor.x + enemyCompressor.width;
 
             if (hitCompressor) {
-                score += 500; scoreDisplay.innerText = score; addMessage(`+500 COMBO !`, ball.x, ball.y, "#06b6d4"); resetBall();
+                score += 500; scoreDisplay.innerText = score; addMessage(`+500 COMBO !`, ball.x, ball.y, "#22d3ee");
+                spawnParticles(ball.x, ball.y, "#22d3ee", 30, 1.3);
+                spawnConfetti(ball.x, ball.y);
+                screenShake = 12; flash = 0.5; flashColor = "#06b6d4";
+                resetBall();
             } else if (hitEnemy) {
-                score -= 300; scoreDisplay.innerText = score; addMessage(`-300 OUPS !`, ball.x, ball.y, "#ef4444"); resetBall();
+                score -= 300; scoreDisplay.innerText = score; addMessage(`-300 OUPS !`, ball.x, ball.y, "#ef4444");
+                spawnParticles(ball.x, ball.y, "#ef4444", 26, 1.1);
+                screenShake = 10; flash = 0.45; flashColor = "#ef4444";
+                resetBall();
             } else if (ball.y <= 120) {
-                score += 10; scoreDisplay.innerText = score; addMessage(`+10 BUT`, ball.x, ball.y, "#4ade80"); resetBall();
+                score += 10; scoreDisplay.innerText = score; addMessage(`+10 BUT`, ball.x, ball.y, "#4ade80");
+                spawnParticles(ball.x, ball.y, "#4ade80", 16, 0.8);
+                screenShake = 4;
+                resetBall();
             } else if (ball.y < -50) {
                 resetBall();
             }
@@ -918,9 +1239,48 @@
         gameHint.style.display = 'none'; // Cache l'indice après le 1er tir
     }
 
+    function drawVignette() {
+        const W = canvas.width, H = canvas.height;
+        const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
+        v.addColorStop(0, "rgba(0,0,0,0)");
+        v.addColorStop(1, "rgba(0,0,0,0.45)");
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, W, H);
+    }
+
     function gameLoop() {
+        globalTime++;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawScenery(); drawCompressor(); drawEnemyCompressor(); drawBall(); drawMessages();
+
+        // Tremblement d'écran à l'impact
+        ctx.save();
+        if (screenShake > 0.5) {
+            const dx = (Math.random() - 0.5) * screenShake;
+            const dy = (Math.random() - 0.5) * screenShake;
+            ctx.translate(dx, dy);
+            screenShake *= 0.86;
+        } else {
+            screenShake = 0;
+        }
+
+        drawScenery();
+        drawCompressor();
+        drawEnemyCompressor();
+        drawBall();
+        drawParticles();
+        drawMessages();
+        drawVignette();
+        ctx.restore();
+
+        // Flash plein écran (additif) lors d'un gros impact
+        if (flash > 0.01) {
+            ctx.globalAlpha = flash;
+            ctx.fillStyle = flashColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1;
+            flash *= 0.85;
+        }
+
         update();
         requestAnimationFrame(gameLoop);
     }
@@ -928,6 +1288,7 @@
     // --- Contrôle du flux ---
     function startGame() {
         score = 0; timeLeft = 30; gameActive = true; messages = []; ballTrails = [];
+        particles = []; confetti = []; screenShake = 0; flash = 0;
         resetBall();
         
         // Réinitialise le bouton de partage pour la nouvelle partie
