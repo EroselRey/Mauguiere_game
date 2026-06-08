@@ -113,6 +113,16 @@
             max-width: 100%;
             max-height: 100%;
             object-fit: contain; /* S'assure que le canvas reste proportionnel */
+            touch-action: none;  /* Évite le scroll/zoom pendant le tir sur mobile */
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        /* En-tête compact sur écrans courts (mobile paysage / petits téléphones) */
+        @media (max-height: 600px) {
+            .brand-logo-img { max-width: 120px; }
+            .contest-banner { font-size: 11px; padding: 4px 12px; margin-top: 5px; }
+            .header { padding: 5px 0; }
         }
 
         /* --- Interface en jeu --- */
@@ -365,7 +375,7 @@
                 <div id="time-display">30s</div>
             </div>
             <!-- Instructions discrètes pendant le jeu -->
-            <div id="game-hint" style="text-align: center; color: rgba(255,255,255,0.5); font-size: 14px; font-weight: bold; margin-top: auto;">Appuyez sur Espace ou cliquez pour tirer</div>
+            <div id="game-hint" style="text-align: center; color: rgba(255,255,255,0.5); font-size: 14px; font-weight: bold; margin-top: auto;">Touchez l'écran (ou Espace) pour tirer</div>
         </div>
 
         <div id="overlay">
@@ -632,15 +642,21 @@
     const timeDisplay = document.getElementById('time-display');
     const gameHint = document.getElementById('game-hint');
 
-    // Adapter le canvas
+    // Adapter le canvas (conserve le ratio 8:5 et tient toujours dans l'écran : PC + mobile)
     function resizeCanvas() {
-        // On utilise la taille de la fenêtre (window) plutôt que celle du parent pour éviter l'écrasement
-        const maxWidth = Math.min(800, window.innerWidth - 20);
-        const maxHeight = Math.min(500, window.innerHeight - 150);
-        
+        const aspect = 800 / 500;
+        const availW = window.innerWidth - 20;
+        // On réserve la place de l'en-tête (logo + bannière) selon la hauteur dispo
+        const headerReserve = window.innerHeight < 600 ? 110 : 150;
+        const availH = window.innerHeight - headerReserve;
+
+        let w = Math.min(800, availW);
+        let h = w / aspect;
+        if (h > availH) { h = availH; w = h * aspect; }
+
         // Applique la taille CSS, le canvas garde sa résolution interne (800x500)
-        canvas.style.width = maxWidth + 'px';
-        canvas.style.height = Math.min(maxWidth * 0.625, maxHeight) + 'px';
+        canvas.style.width = Math.round(w) + 'px';
+        canvas.style.height = Math.round(h) + 'px';
     }
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas(); // Forcer l'appel immédiatement
@@ -878,50 +894,81 @@
             ctx.shadowBlur = 0;
         }
 
-        // ===== CADRE / FILET DU BUT =====
-        // Logo en fond sur le filet
+        // ===== VRAI BUT DE FOOTBALL =====
+        // Géométrie du but : montants blancs proches des bords, profondeur en haut
+        const postW = 12;            // épaisseur des poteaux
+        const depth = 34;            // profondeur (fuyante) du toit du but
+        const inL = postW, inR = W - postW, inT = postW; // intérieur du cadre (face avant)
+
+        // 1) Profondeur du but : toit et arrière qui fuient vers le haut
+        ctx.save();
+        // Plan supérieur (toit) du but
+        ctx.fillStyle = "rgba(15, 30, 55, 0.55)";
+        ctx.beginPath();
+        ctx.moveTo(inL, inT); ctx.lineTo(inR, inT);
+        ctx.lineTo(inR - depth, inT - depth * 0.45);
+        ctx.lineTo(inL + depth, inT - depth * 0.45);
+        ctx.closePath(); ctx.fill();
+
+        // Filet du fond (losanges) — dessiné dans la zone intérieure
+        ctx.beginPath();
+        ctx.rect(inL, inT, inR - inL, goalHeight - inT);
+        ctx.clip();
+
+        // Logo en filigrane sur le filet
         if (bgLogo.complete) {
-            ctx.globalAlpha = 0.22;
+            ctx.globalAlpha = 0.16;
             const ratio = bgLogo.width / bgLogo.height;
-            const h = 110;
-            const w = h * ratio;
-            ctx.drawImage(bgLogo, W / 2 - w / 2, goalHeight / 2 - h / 2 - 18, w, h);
+            const lh = 95, lw = lh * ratio;
+            ctx.drawImage(bgLogo, W / 2 - lw / 2, goalHeight / 2 - lh / 2 - 14, lw, lh);
             ctx.globalAlpha = 1.0;
         }
 
-        // Filet animé (légère ondulation)
-        ctx.save();
-        ctx.strokeStyle = "rgba(226, 232, 240, 0.22)";
+        // Maille en losanges (deux familles de diagonales) + légère ondulation
+        const mesh = 22;
+        const wob = Math.sin(globalTime * 0.05) * 1.5;
+        ctx.strokeStyle = "rgba(226, 232, 240, 0.30)";
         ctx.lineWidth = 1;
-        const wob = Math.sin(globalTime * 0.06) * 2;
         ctx.beginPath();
-        for (let i = 0; i <= W; i += 26) {
-            ctx.moveTo(i, 12);
-            ctx.lineTo(i + wob * (i / W), goalHeight);
+        for (let i = -goalHeight; i < W + goalHeight; i += mesh) {
+            ctx.moveTo(i, 0); ctx.lineTo(i + goalHeight + wob, goalHeight);          // diagonale ↘
+            ctx.moveTo(i, 0); ctx.lineTo(i - goalHeight - wob, goalHeight);          // diagonale ↙
         }
-        for (let j = 12; j <= goalHeight; j += 26) {
-            ctx.moveTo(0, j);
-            ctx.lineTo(W, j + Math.sin(globalTime * 0.05 + j) * 1.2);
-        }
+        ctx.stroke();
+        // Renfort horizontal léger du filet
+        ctx.strokeStyle = "rgba(226, 232, 240, 0.10)";
+        ctx.beginPath();
+        for (let j = inT; j <= goalHeight; j += mesh) { ctx.moveTo(inL, j); ctx.lineTo(inR, j); }
         ctx.stroke();
         ctx.restore();
 
-        // Poteaux & barre — métal brillant avec liseré néon
-        const postGrad = ctx.createLinearGradient(0, 0, 0, goalHeight);
-        postGrad.addColorStop(0, "#f1f5f9");
-        postGrad.addColorStop(0.5, "#cbd5e1");
-        postGrad.addColorStop(1, "#94a3b8");
-        ctx.fillStyle = postGrad;
-        ctx.shadowBlur = 14; ctx.shadowColor = "rgba(0,108,184,0.6)";
-        ctx.fillRect(0, 0, W, 12);          // barre transversale
-        ctx.fillRect(0, 0, 12, goalHeight); // poteau gauche
-        ctx.fillRect(W - 12, 0, 12, goalHeight); // poteau droit
-        ctx.shadowBlur = 0;
-        // Reflets sur les poteaux
-        ctx.fillStyle = "rgba(255,255,255,0.5)";
-        ctx.fillRect(2, 0, 2, goalHeight);
-        ctx.fillRect(W - 10, 0, 2, goalHeight);
-        ctx.fillRect(0, 2, W, 2);
+        // 2) Cadre du but : poteaux + barre transversale, blancs et brillants (3D)
+        function whitePostV(px) { // poteau vertical
+            const g = ctx.createLinearGradient(px, 0, px + postW, 0);
+            g.addColorStop(0, "#cbd5e1"); g.addColorStop(0.35, "#ffffff"); g.addColorStop(1, "#94a3b8");
+            ctx.fillStyle = g; ctx.fillRect(px, 0, postW, goalHeight);
+        }
+        ctx.save();
+        ctx.shadowBlur = 12; ctx.shadowColor = "rgba(0,0,0,0.4)";
+        // Barre transversale
+        const gb = ctx.createLinearGradient(0, 0, 0, postW);
+        gb.addColorStop(0, "#ffffff"); gb.addColorStop(1, "#9aa7b8");
+        ctx.fillStyle = gb; ctx.fillRect(0, 0, W, postW);
+        // Poteaux
+        whitePostV(0); whitePostV(W - postW);
+        ctx.restore();
+        // Montants de profondeur (barres fuyantes vers l'arrière)
+        ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(inL + postW / 2, inT); ctx.lineTo(inL + depth, inT - depth * 0.45);
+        ctx.moveTo(inR - postW / 2, inT); ctx.lineTo(inR - depth, inT - depth * 0.45);
+        ctx.lineTo(inL + depth, inT - depth * 0.45);
+        ctx.stroke();
+        // Reflet brillant sur les poteaux
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.fillRect(3, postW, 2, goalHeight - postW);
+        ctx.fillRect(W - 5, postW, 2, goalHeight - postW);
+        ctx.fillRect(0, 3, W, 2);
 
         // ===== PELOUSE EN PERSPECTIVE =====
         const groundGrad = ctx.createLinearGradient(0, goalHeight, 0, H);
@@ -966,94 +1013,132 @@
         ctx.beginPath(); ctx.arc(cx, H - 70, 4, 0, Math.PI * 2); ctx.fill();
     }
 
-    // Dessine un compresseur stylisé moderne (carrosserie arrondie + cuve + manomètre)
-    function drawCompressorBody(o, opts) {
+    // Petit logo "nœud papillon" Mauguière (deux triangles se rejoignant au centre)
+    function drawBowtie(cx, cy, s, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.moveTo(cx - s, cy - s * 0.8); ctx.lineTo(cx - 1, cy); ctx.lineTo(cx - s, cy + s * 0.8); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx + s, cy - s * 0.8); ctx.lineTo(cx + 1, cy); ctx.lineTo(cx + s, cy + s * 0.8); ctx.closePath(); ctx.fill();
+    }
+
+    // Dessine un compresseur industriel réaliste type caisson Mauguière
+    // (caisson coloré à gauche + section technique grise à droite : écran, bouton
+    //  d'arrêt rouge, grilles de ventilation, socle avec passages de fourche)
+    function drawCompressorUnit(o, opts) {
         const { x, y, width: w, height: h } = o;
-        const r = 12; // arrondi
-        const bob = Math.sin(globalTime * 0.08 + opts.phase) * 3; // léger flottement
+        const bob = Math.sin(globalTime * 0.08 + opts.phase) * 2.5; // léger flottement
         ctx.save();
         ctx.translate(0, bob);
 
-        // Halo lumineux pulsé
-        const pulse = 0.6 + 0.4 * (0.5 + 0.5 * Math.sin(globalTime * 0.1 + opts.phase));
-        ctx.shadowBlur = 28 * pulse;
-        ctx.shadowColor = opts.glow;
+        const baseH = Math.round(h * 0.15);     // socle
+        const cabH = h - baseH;                 // hauteur du caisson
+        const splitX = x + Math.round(w * 0.60); // séparation couleur / gris
+        const r = 4;
 
-        // Carrosserie arrondie avec dégradé
-        const g = ctx.createLinearGradient(x, y, x, y + h);
-        g.addColorStop(0, opts.c0);
-        g.addColorStop(0.5, opts.c1);
-        g.addColorStop(1, opts.c2);
-        ctx.fillStyle = g;
-        roundRect(x, y, w, h, r); ctx.fill();
+        // Halo lumineux pulsé (signale la cible)
+        const pulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(globalTime * 0.1 + opts.phase));
+        ctx.shadowBlur = 22 * pulse; ctx.shadowColor = opts.glow;
+
+        // --- Socle sombre + passages de fourche ---
+        ctx.fillStyle = "#1f2937";
+        roundRect(x, y + cabH - 2, w, baseH + 2, 3); ctx.fill();
         ctx.shadowBlur = 0;
+        ctx.fillStyle = "#0b0f17";
+        ctx.fillRect(x + w * 0.16, y + cabH + 1, w * 0.18, baseH - 2);
+        ctx.fillRect(x + w * 0.60, y + cabH + 1, w * 0.18, baseH - 2);
 
-        // Reflet brillant en haut
-        const gloss = ctx.createLinearGradient(x, y, x, y + h * 0.45);
-        gloss.addColorStop(0, "rgba(255,255,255,0.35)");
-        gloss.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.fillStyle = gloss;
-        roundRect(x + 4, y + 3, w - 8, h * 0.45, r * 0.7); ctx.fill();
+        // --- Caisson principal (clip arrondi) ---
+        ctx.save();
+        roundRect(x, y, w, cabH, r); ctx.clip();
 
-        // Liseré néon
-        ctx.strokeStyle = opts.edge; ctx.lineWidth = 2;
-        roundRect(x, y, w, h, r); ctx.stroke();
+        // Partie colorée (gauche)
+        const bg = ctx.createLinearGradient(x, y, x, y + cabH);
+        bg.addColorStop(0, opts.c0); bg.addColorStop(1, opts.c2);
+        ctx.fillStyle = bg;
+        ctx.fillRect(x, y, splitX - x, cabH);
 
-        // Cuve / grille latérale
-        ctx.fillStyle = "rgba(15,23,42,0.85)";
-        roundRect(x + 9, y + 11, 24, h - 22, 5); ctx.fill();
-        ctx.fillStyle = "rgba(148,163,184,0.55)";
-        for (let i = 0; i < 4; i++) ctx.fillRect(x + 11, y + 14 + i * 8, 20, 3);
+        // Partie technique grise (droite)
+        const gg = ctx.createLinearGradient(splitX, y, splitX, y + cabH);
+        gg.addColorStop(0, "#e5e7eb"); gg.addColorStop(1, "#9aa3af");
+        ctx.fillStyle = gg;
+        ctx.fillRect(splitX, y, x + w - splitX, cabH);
 
-        // Manomètre lumineux
-        const gx = x + w - 18, gy = y + 16;
-        ctx.fillStyle = "#0f172a";
-        ctx.beginPath(); ctx.arc(gx, gy, 8, 0, Math.PI * 2); ctx.fill();
+        // Persiennes de ventilation sur le dessus (partie colorée)
+        ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1;
+        for (let i = 0; i < 3; i++) { const ly = y + 3 + i * 2.4; ctx.beginPath(); ctx.moveTo(x + 4, ly); ctx.lineTo(splitX - 4, ly); ctx.stroke(); }
+
+        // Séparation des deux portes du caisson coloré
+        ctx.strokeStyle = "rgba(0,0,0,0.16)";
+        ctx.beginPath(); ctx.moveTo(x + (splitX - x) * 0.5, y + 9); ctx.lineTo(x + (splitX - x) * 0.5, y + cabH - 4); ctx.stroke();
+
+        // Logo Mauguière (nœud papillon + texte) sur la porte colorée
+        const lcx = x + (splitX - x) * 0.5;
+        drawBowtie(lcx, y + cabH * 0.42, 6, "#ffffff");
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "800 8px Outfit"; ctx.textAlign = "center";
+        ctx.fillText("mauguière", lcx, y + cabH * 0.62, (splitX - x) - 6);
+
+        // --- Section technique grise : écran de contrôle ---
+        const gx0 = splitX + 3, gw = (x + w) - splitX - 6;
+        ctx.fillStyle = "#111827"; roundRect(gx0, y + 6, gw, cabH * 0.26, 2); ctx.fill();
+        ctx.fillStyle = opts.screen; // ligne d'écran lumineuse
+        ctx.fillRect(gx0 + 1.5, y + 7.5, gw - 3, cabH * 0.10);
+
+        // Bouton d'arrêt d'urgence rouge
+        const ebx = gx0 + gw * 0.5, eby = y + cabH * 0.42;
+        ctx.fillStyle = "#b91c1c";
+        ctx.beginPath(); ctx.arc(ebx, eby, 2.6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.beginPath(); ctx.arc(ebx - 0.7, eby - 0.7, 0.9, 0, Math.PI * 2); ctx.fill();
+
+        // Grille de ventilation latérale (bas de la section grise)
+        ctx.fillStyle = "rgba(17,24,39,0.45)";
+        roundRect(gx0, y + cabH * 0.56, gw, cabH * 0.34, 2); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        for (let i = 0; i < 4; i++) { const vy = y + cabH * 0.60 + i * 2.4; ctx.beginPath(); ctx.moveTo(gx0 + 1, vy); ctx.lineTo(gx0 + gw - 1, vy); ctx.stroke(); }
+
+        // Reflet brillant général
+        const gloss = ctx.createLinearGradient(x, y, x, y + cabH * 0.55);
+        gloss.addColorStop(0, "rgba(255,255,255,0.22)"); gloss.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = gloss; ctx.fillRect(x, y, w, cabH * 0.55);
+
+        ctx.restore(); // fin clip
+
+        // Liseré néon autour du caisson
         ctx.strokeStyle = opts.edge; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(gx, gy, 8, 0, Math.PI * 2); ctx.stroke();
-        ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 1.5;
-        const ang = -Math.PI / 2 + Math.sin(globalTime * 0.15 + opts.phase) * 0.9;
-        ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + Math.cos(ang) * 6, gy + Math.sin(ang) * 6); ctx.stroke();
+        roundRect(x, y, w, cabH, r); ctx.stroke();
 
-        opts.badge(o);
+        // Marquages spécifiques (croix concurrent) + pastille de score
+        opts.badge(o, cabH);
         ctx.restore();
     }
 
     function drawCompressor() {
-        drawCompressorBody(compressor, {
-            c0: "#38bdf8", c1: "#0284c7", c2: "#03396b",
-            glow: "#06b6d4", edge: "rgba(125,211,252,0.9)", phase: 0,
+        drawCompressorUnit(compressor, {
+            c0: "#2563eb", c2: "#0a1f5c", glow: "#3b82f6",
+            edge: "rgba(147,197,253,0.9)", screen: "#22d3ee", phase: 0,
             badge: (o) => {
-                ctx.fillStyle = "#fff";
-                ctx.font = "900 12px Outfit"; ctx.textAlign = "center";
-                ctx.shadowBlur = 6; ctx.shadowColor = "rgba(0,0,0,0.5)";
-                ctx.fillText("mauguière", o.x + o.width / 2, o.y + o.height - 12, o.width - 8);
-                ctx.shadowBlur = 0;
-                // Pastille "+500"
                 ctx.fillStyle = "#22d3ee";
-                ctx.font = "900 10px Outfit";
-                ctx.fillText("+500", o.x + o.width / 2, o.y + o.height + 14);
+                ctx.font = "900 10px Outfit"; ctx.textAlign = "center";
+                ctx.fillText("+500", o.x + o.width / 2, o.y + o.height + 13);
             }
         });
     }
 
     function drawEnemyCompressor() {
-        drawCompressorBody(enemyCompressor, {
-            c0: "#f87171", c1: "#dc2626", c2: "#7f1d1d",
-            glow: "#ef4444", edge: "rgba(252,165,165,0.9)", phase: 2.1,
-            badge: (o) => {
-                // Croix d'interdiction
-                ctx.strokeStyle = "#fecaca"; ctx.lineWidth = 4; ctx.lineCap = "round";
+        drawCompressorUnit(enemyCompressor, {
+            c0: "#ef4444", c2: "#6b1212", glow: "#ef4444",
+            edge: "rgba(252,165,165,0.9)", screen: "#fca5a5", phase: 2.1,
+            badge: (o, cabH) => {
+                // Croix d'interdiction par-dessus le caisson coloré
+                const cx = o.x + o.width * 0.30, cy = o.y + cabH * 0.42, s = 9;
+                ctx.strokeStyle = "rgba(254,202,202,0.9)"; ctx.lineWidth = 3.5; ctx.lineCap = "round";
                 ctx.beginPath();
-                ctx.moveTo(o.x + o.width - 30, o.y + 12); ctx.lineTo(o.x + o.width - 16, o.y + 26);
-                ctx.moveTo(o.x + o.width - 16, o.y + 12); ctx.lineTo(o.x + o.width - 30, o.y + 26);
+                ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx + s, cy + s);
+                ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx - s, cy + s);
                 ctx.stroke(); ctx.lineCap = "butt";
-                ctx.fillStyle = "rgba(255,255,255,0.85)";
-                ctx.font = "bold 11px Outfit"; ctx.textAlign = "center";
-                ctx.fillText("concurrent", o.x + o.width / 2, o.y + o.height - 12, o.width - 8);
                 ctx.fillStyle = "#fca5a5";
-                ctx.font = "900 10px Outfit";
-                ctx.fillText("-300", o.x + o.width / 2, o.y + o.height + 14);
+                ctx.font = "900 10px Outfit"; ctx.textAlign = "center";
+                ctx.fillText("-300", o.x + o.width / 2, o.y + o.height + 13);
             }
         });
     }
